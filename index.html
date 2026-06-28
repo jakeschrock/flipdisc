@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FlipDisc">
+<meta name="theme-color" content="#0a0a0a">
+<title>FlipDisc — CD Scanner</title>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --surface2: #1e1e1e;
+  --border: #2a2a2a;
+  --accent: #c8f548;
+  --text: #f0f0f0;
+  --text-muted: #666;
+  --text-dim: #999;
+  --red: #ff4d4d;
+  --gold: #f5c842;
+  --green: #4dff91;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Space Grotesk', sans-serif;
+  overscroll-behavior: none;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+}
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+}
+
+.logo { display: flex; align-items: center; gap: 10px; }
+
+.disc-icon {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #2a2a2a, #444, #2a2a2a, #444, #2a2a2a);
+  border: 2.5px solid var(--accent);
+  position: relative;
+}
+.disc-icon::after {
+  content: '';
+  width: 7px; height: 7px;
+  background: var(--bg);
+  border-radius: 50%;
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  border: 1.5px solid var(--accent);
+}
+
+.logo-text {
+  font-family: 'Space Mono', monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+
+.history-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.history-btn:active { opacity: 0.7; }
+
+/* ── Setup Screen ── */
+#setupScreen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  gap: 24px;
+}
+
+.setup-icon {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.setup-title {
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.setup-body {
+  font-size: 14px;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.6;
+  max-width: 300px;
+}
+
+.setup-body a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.token-input-wrap {
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.token-label {
+  font-size: 11px;
+  font-family: 'Space Mono', monospace;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.token-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
+  color: var(--text);
+  width: 100%;
+  outline: none;
+  -webkit-appearance: none;
+}
+.token-input:focus { border-color: var(--accent); }
+.token-input::placeholder { color: var(--text-muted); }
+
+.btn-go {
+  width: 100%;
+  max-width: 340px;
+  padding: 16px;
+  background: var(--accent);
+  color: #0a0a0a;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+.btn-go:active { opacity: 0.85; }
+.btn-go:disabled { opacity: 0.4; }
+
+.setup-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.5;
+  max-width: 280px;
+}
+
+/* ── Scanner Screen ── */
+#scannerScreen {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+}
+
+/* ── Camera ── */
+.camera-wrap {
+  position: relative;
+  width: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+/* Taller on iPhone for comfortable one-handed use */
+.camera-wrap { height: 52vw; min-height: 200px; max-height: 280px; }
+
+#videoEl {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cam-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.scan-frame {
+  width: 70%;
+  height: 40%;
+  position: relative;
+}
+
+.scan-frame .corner {
+  position: absolute;
+  width: 20px; height: 20px;
+  border-color: var(--accent);
+  border-style: solid;
+  opacity: 0.9;
+}
+.scan-frame .corner.tl { top: 0; left: 0; border-width: 2px 0 0 2px; }
+.scan-frame .corner.tr { top: 0; right: 0; border-width: 2px 2px 0 0; }
+.scan-frame .corner.bl { bottom: 0; left: 0; border-width: 0 0 2px 2px; }
+.scan-frame .corner.br { bottom: 0; right: 0; border-width: 0 2px 2px 0; }
+
+.scan-line {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: scanline 1.8s ease-in-out infinite;
+}
+
+@keyframes scanline {
+  0% { top: 5%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 95%; opacity: 0; }
+}
+
+.cam-status {
+  position: absolute;
+  top: 10px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-family: 'Space Mono', monospace;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.live-dot {
+  width: 5px; height: 5px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: blink 1s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── Scroll content below camera ── */
+.scroll-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px 16px 120px;
+}
+
+/* ── Scan button bar (fixed bottom) ── */
+.bottom-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding: 12px 20px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 20;
+}
+
+.scan-big-btn {
+  flex: 1;
+  height: 54px;
+  background: var(--accent);
+  color: #0a0a0a;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  letter-spacing: 0.01em;
+}
+.scan-big-btn:active { opacity: 0.85; transform: scale(0.98); }
+.scan-big-btn:disabled { opacity: 0.35; }
+
+.manual-btn {
+  height: 54px;
+  width: 54px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.manual-btn:active { opacity: 0.7; }
+
+/* ── Status / loading strip ── */
+.status-strip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.spinner-sm {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Result card ── */
+.result-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.result-card-header {
+  padding: 14px 16px 0;
+}
+
+.album-title {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 3px;
+}
+
+.album-meta {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+}
+
+.price-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.price-cell {
+  background: var(--surface2);
+  padding: 12px 10px;
+  text-align: center;
+}
+
+.price-cell-label {
+  font-size: 9px;
+  font-family: 'Space Mono', monospace;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 5px;
+}
+
+.price-cell-value {
+  font-size: 17px;
+  font-weight: 700;
+  font-family: 'Space Mono', monospace;
+  color: var(--accent);
+}
+
+.price-cell-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.verdict-row {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.verdict-row.flip { background: rgba(77,255,145,0.06); }
+.verdict-row.maybe { background: rgba(245,200,66,0.06); }
+.verdict-row.pass { background: rgba(255,77,77,0.06); }
+
+.verdict-badge {
+  font-size: 11px;
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.flip .verdict-badge { background: rgba(77,255,145,0.15); color: var(--green); }
+.maybe .verdict-badge { background: rgba(245,200,66,0.15); color: var(--gold); }
+.pass .verdict-badge { background: rgba(255,77,77,0.15); color: var(--red); }
+
+.verdict-why {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.result-notes {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.discogs-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  border-top: 1px solid var(--border);
+}
+.discogs-link:active { opacity: 0.7; }
+
+/* ── Manual search ── */
+.manual-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+  display: none;
+}
+
+.manual-panel.open { display: block; }
+
+.manual-title {
+  font-size: 12px;
+  font-family: 'Space Mono', monospace;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.search-row {
+  display: flex;
+  gap: 8px;
+}
+
+.search-input {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+  -webkit-appearance: none;
+}
+.search-input:focus { border-color: var(--accent); }
+.search-input::placeholder { color: var(--text-muted); }
+
+.search-go {
+  background: var(--accent);
+  color: #0a0a0a;
+  border: none;
+  border-radius: 10px;
+  padding: 0 18px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.search-go:active { opacity: 0.85; }
+
+/* ── History modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 50;
+  display: none;
+  align-items: flex-end;
+}
+.modal-overlay.open { display: flex; }
+
+.modal-sheet {
+  width: 100%;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  max-height: 75vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+}
+
+.modal-handle {
+  width: 36px; height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 0 auto 20px;
+}
+
+.modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.history-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: 'Space Mono', monospace;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.history-item:last-child { border-bottom: none; }
+
+.history-info { flex: 1; min-width: 0; }
+.history-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history-sub { font-size: 12px; color: var(--text-muted); font-family: 'Space Mono', monospace; }
+
+.history-verdict-badge {
+  font-size: 11px;
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.hv-flip { background: rgba(77,255,145,0.15); color: var(--green); }
+.hv-maybe { background: rgba(245,200,66,0.15); color: var(--gold); }
+.hv-pass { background: rgba(255,77,77,0.15); color: var(--red); }
+
+/* ── Error ── */
+.error-strip {
+  background: rgba(255,77,77,0.08);
+  border: 1px solid rgba(255,77,77,0.2);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #ff8080;
+  font-family: 'Space Mono', monospace;
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+/* ── Settings link ── */
+.settings-link {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'Space Mono', monospace;
+  text-align: center;
+  padding: 8px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="disc-icon"></div>
+    <span class="logo-text">FLIPDISC</span>
+  </div>
+  <button class="history-btn" onclick="openHistory()">History</button>
+</header>
+
+<!-- ════ SETUP SCREEN ════ -->
+<div id="setupScreen">
+  <div class="setup-icon">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5">
+      <rect x="2" y="3" width="20" height="14" rx="2"/>
+      <line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+    </svg>
+  </div>
+  <div>
+    <div class="setup-title">Connect Discogs</div>
+  </div>
+  <div class="setup-body">
+    Get a free API token at <a href="https://www.discogs.com/settings/developers" target="_blank">discogs.com/settings/developers</a> → Generate Token. Paste it below to start scanning.
+  </div>
+  <div class="token-input-wrap">
+    <div class="token-label">Discogs API Token</div>
+    <input class="token-input" id="tokenInput" type="password" placeholder="paste your token here" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  </div>
+  <button class="btn-go" id="goBtn" onclick="saveToken()">Let's Go →</button>
+  <div class="setup-note">Token is saved to your device only. Never sent anywhere except Discogs.</div>
+</div>
+
+<!-- ════ SCANNER SCREEN ════ -->
+<div id="scannerScreen">
+
+  <div class="camera-wrap">
+    <video id="videoEl" autoplay playsinline muted webkit-playsinline></video>
+    <canvas id="canvasEl" style="display:none;"></canvas>
+    <div class="cam-overlay">
+      <div class="scan-frame">
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+        <div class="scan-line"></div>
+      </div>
+    </div>
+    <div class="cam-status"><div class="live-dot"></div> POINT AT BARCODE</div>
+  </div>
+
+  <div class="scroll-content">
+
+    <div id="statusStrip" class="status-strip" style="display:none;">
+      <div class="spinner-sm"></div>
+      <span id="statusText">Looking up...</span>
+    </div>
+
+    <div id="errorStrip" class="error-strip" style="display:none;"></div>
+
+    <div id="resultCard" class="result-card" style="display:none;"></div>
+
+    <div id="manualPanel" class="manual-panel">
+      <div class="manual-title">Search by artist / album / barcode</div>
+      <div class="search-row">
+        <input class="search-input" id="manualInput" type="search" placeholder="e.g. Portishead Dummy" autocorrect="off" autocapitalize="off">
+        <button class="search-go" onclick="manualSearch()">Go</button>
+      </div>
+    </div>
+
+    <div class="settings-link" onclick="resetToken()">Change Discogs token</div>
+
+  </div>
+
+  <div class="bottom-bar">
+    <button class="scan-big-btn" id="scanBtn" onclick="captureBarcode()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="2.5">
+        <rect x="1" y="4" width="3" height="16"/><rect x="7" y="4" width="1.5" height="16"/>
+        <rect x="11" y="4" width="3" height="16"/><rect x="17" y="4" width="1.5" height="16"/>
+        <rect x="21" y="4" width="2" height="16"/>
+      </svg>
+      Scan Barcode
+    </button>
+    <button class="manual-btn" id="manualToggleBtn" onclick="toggleManual()" title="Manual search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+    </button>
+  </div>
+
+</div>
+
+<!-- ════ HISTORY MODAL ════ -->
+<div class="modal-overlay" id="historyModal" onclick="closeHistoryOutside(event)">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Scan History</div>
+    <div id="historyList"></div>
+  </div>
+</div>
+
+<!-- ZXing for barcode decoding -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+
+<script>
+// ─── State ───
+let discogsToken = localStorage.getItem('discogsToken') || '';
+let scanHistory = JSON.parse(localStorage.getItem('flipdiscHistory') || '[]');
+let codeReader = null;
+let scanning = false;
+let manualOpen = false;
+let currentResult = null;
+
+// ─── Init ───
+window.addEventListener('load', () => {
+  if (discogsToken) {
+    showScanner();
+  }
+  document.getElementById('tokenInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveToken();
+  });
+  document.getElementById('manualInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') manualSearch();
+  });
+});
+
+// ─── Token setup ───
+function saveToken() {
+  const val = document.getElementById('tokenInput').value.trim();
+  if (!val) return;
+  discogsToken = val;
+  localStorage.setItem('discogsToken', val);
+  showScanner();
+}
+
+function resetToken() {
+  if (!confirm('Change your Discogs token?')) return;
+  localStorage.removeItem('discogsToken');
+  discogsToken = '';
+  stopCamera();
+  document.getElementById('scannerScreen').style.display = 'none';
+  document.getElementById('setupScreen').style.display = 'flex';
+}
+
+function showScanner() {
+  document.getElementById('setupScreen').style.display = 'none';
+  document.getElementById('scannerScreen').style.display = 'flex';
+  document.getElementById('scannerScreen').style.flexDirection = 'column';
+  startCamera();
+}
+
+// ─── Camera ───
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    });
+    const video = document.getElementById('videoEl');
+    video.srcObject = stream;
+  } catch (err) {
+    showError('Camera access denied. Use manual search instead.');
+    document.getElementById('scanBtn').disabled = true;
+  }
+}
+
+function stopCamera() {
+  const video = document.getElementById('videoEl');
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+}
+
+// ─── Barcode capture & decode ───
+async function captureBarcode() {
+  const video = document.getElementById('videoEl');
+  const canvas = document.getElementById('canvasEl');
+
+  if (!video.srcObject) {
+    showError('Camera not available. Use manual search.');
+    return;
+  }
+
+  // Capture frame
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+
+  showStatus('Reading barcode...');
+
+  try {
+    // Try ZXing decode
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.UPC_E,
+    ]);
+    const reader = new ZXing.BrowserBarcodeReader(hints);
+    const imgEl = new Image();
+    imgEl.src = canvas.toDataURL('image/jpeg', 0.9);
+    await new Promise(r => imgEl.onload = r);
+
+    let barcode = null;
+    try {
+      const decoded = await reader.decodeFromImageElement(imgEl);
+      barcode = decoded.getText();
+    } catch {
+      // ZXing failed, try raw BarcodeDetector API if available
+      if ('BarcodeDetector' in window) {
+        const detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128'] });
+        const barcodes = await detector.detect(canvas);
+        if (barcodes.length > 0) barcode = barcodes[0].rawValue;
+      }
+    }
+
+    if (!barcode) {
+      hideStatus();
+      showError('No barcode detected. Hold phone steady with barcode filling the frame, then try again. Or use manual search.');
+      return;
+    }
+
+    showStatus(`Found barcode: ${barcode} — searching Discogs...`);
+    await lookupBarcode(barcode);
+
+  } catch (err) {
+    hideStatus();
+    showError('Scan failed. Try manual search or hold phone closer to barcode.');
+    console.error(err);
+  }
+}
+
+// ─── Discogs lookup by barcode ───
+async function lookupBarcode(barcode) {
+  try {
+    const url = `https://api.discogs.com/database/search?barcode=${encodeURIComponent(barcode)}&token=${discogsToken}&type=release&per_page=5`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Discogs error: ${res.status}`);
+    const data = await res.json();
+
+    if (!data.results || data.results.length === 0) {
+      hideStatus();
+      showError(`No Discogs listing found for barcode ${barcode}. Try manual search.`);
+      return;
+    }
+
+    const release = data.results[0];
+    await fetchReleaseDetails(release.id, release);
+
+  } catch (err) {
+    hideStatus();
+    showError('Could not reach Discogs. Check your token or internet connection.');
+    console.error(err);
+  }
+}
+
+// ─── Discogs manual search ───
+async function manualSearch() {
+  const query = document.getElementById('manualInput').value.trim();
+  if (!query) return;
+
+  showStatus('Searching Discogs...');
+  hideError();
+
+  try {
+    const url = `https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&token=${discogsToken}&type=release&format=CD&per_page=5`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Discogs error: ${res.status}`);
+    const data = await res.json();
+
+    if (!data.results || data.results.length === 0) {
+      hideStatus();
+      showError('No results found. Try artist name + album title.');
+      return;
+    }
+
+    const release = data.results[0];
+    await fetchReleaseDetails(release.id, release);
+    document.getElementById('manualInput').value = '';
+    document.getElementById('manualInput').blur();
+
+  } catch (err) {
+    hideStatus();
+    showError('Search failed. Check your connection.');
+  }
+}
+
+// ─── Fetch full release + price stats ───
+async function fetchReleaseDetails(releaseId, searchResult) {
+  try {
+    showStatus('Getting price data...');
+
+    const [releaseRes, statsRes] = await Promise.all([
+      fetch(`https://api.discogs.com/releases/${releaseId}?token=${discogsToken}`),
+      fetch(`https://api.discogs.com/marketplace/stats/${releaseId}?token=${discogsToken}`)
+    ]);
+
+    const release = await releaseRes.json();
+    const stats = statsRes.ok ? await statsRes.json() : null;
+
+    hideStatus();
+    renderResult(release, stats, searchResult);
+
+  } catch (err) {
+    hideStatus();
+    showError('Could not load price data.');
+    console.error(err);
+  }
+}
+
+// ─── Render result ───
+function renderResult(release, stats, searchResult) {
+  const title = release.title || searchResult?.title || 'Unknown';
+  const artist = release.artists?.[0]?.name || searchResult?.country || '';
+  const year = release.year || searchResult?.year || '';
+  const label = release.labels?.[0]?.name || '';
+  const catno = release.labels?.[0]?.catno || '';
+  const country = release.country || '';
+  const genres = release.genres?.join(', ') || release.styles?.join(', ') || '';
+
+  const lowestPrice = stats?.lowest_price?.value;
+  const medianPrice = stats?.num_for_sale > 0 ? null : null; // discogs doesn't give median directly
+  const numForSale = stats?.num_for_sale ?? 0;
+  const numWanting = release.community?.want ?? 0;
+  const numHave = release.community?.have ?? 0;
+
+  // Compute want/have ratio as demand signal
+  const wantHaveRatio = numHave > 0 ? (numWanting / numHave) : 0;
+
+  // Verdict logic
+  let verdict, verdictWhy;
+  const lp = lowestPrice;
+  const MIN_WANTERS = 25;
+  const hasRealDemand = numWanting >= MIN_WANTERS;
+
+  if (!lp) {
+    // No listings at all
+    if (hasRealDemand) {
+      verdict = 'maybe';
+      verdictWhy = `No active listings but ${numWanting.toLocaleString()} people want it — could be genuinely scarce. Check sold history on Discogs.`;
+    } else {
+      verdict = 'pass';
+      verdictWhy = `No active listings and only ${numWanting} wanters — probably just forgotten, not valuable.`;
+    }
+  } else if (!hasRealDemand) {
+    // Has a price but not enough demand — cap at MAYBE regardless of price
+    verdict = 'pass';
+    verdictWhy = `Only ${numWanting} people want this. That listing at $${lp.toFixed(2)} could sit forever — not enough buyers.`;
+    if (lp >= 8) {
+      verdict = 'maybe';
+      verdictWhy = `Listed at $${lp.toFixed(2)} but only ${numWanting} wanters — demand is thin. Verify there's an actual market before buying.`;
+    }
+  } else if (lp >= 10) {
+    verdict = 'flip';
+    verdictWhy = `$${lp.toFixed(2)} lowest ask, ${numWanting.toLocaleString()} wanters — solid price and real demand. Good flip if you're paying under $3.`;
+  } else if (lp >= 4) {
+    verdict = 'maybe';
+    verdictWhy = `$${lp.toFixed(2)} lowest ask with ${numWanting.toLocaleString()} wanters — margin is thin. Worth it at $1, skip at $3+.`;
+  } else {
+    verdict = 'pass';
+    verdictWhy = `Lowest listing $${lp.toFixed(2)} — common pressing, barely covers fees even with ${numWanting} wanters.`;
+  }
+
+  // Upgrade to FLIP if strong want/have ratio AND meets demand floor
+  if (hasRealDemand && wantHaveRatio > 0.5 && lp && lp >= 6) {
+    verdict = 'flip';
+    verdictWhy = `${numWanting.toLocaleString()} want it, ${numHave.toLocaleString()} have it — strong demand ratio. Lowest listing $${lp.toFixed(2)}.`;
+  }
+
+  const discogsUrl = `https://www.discogs.com/release/${release.id}`;
+
+  const verdictLabel = { flip: '🟢 FLIP IT', maybe: '🟡 MAYBE', pass: '🔴 PASS' }[verdict];
+
+  const card = document.getElementById('resultCard');
+  card.innerHTML = `
+    <div class="result-card-header">
+      <div class="album-title">${escHtml(title)}</div>
+      <div class="album-meta">${escHtml(artist)}${year ? ' · ' + year : ''}${label ? ' · ' + escHtml(label) : ''}${catno ? ' · ' + escHtml(catno) : ''}</div>
+    </div>
+    <div class="price-grid">
+      <div class="price-cell">
+        <div class="price-cell-label">Lowest Ask</div>
+        <div class="price-cell-value">${lp ? '$' + lp.toFixed(2) : '—'}</div>
+        <div class="price-cell-sub">${numForSale} for sale</div>
+      </div>
+      <div class="price-cell">
+        <div class="price-cell-label">Wanting</div>
+        <div class="price-cell-value">${numWanting.toLocaleString()}</div>
+        <div class="price-cell-sub">on wantlist</div>
+      </div>
+      <div class="price-cell">
+        <div class="price-cell-label">Have It</div>
+        <div class="price-cell-value">${numHave.toLocaleString()}</div>
+        <div class="price-cell-sub">in collections</div>
+      </div>
+    </div>
+    <div class="verdict-row ${verdict}">
+      <span class="verdict-badge">${verdictLabel}</span>
+      <span class="verdict-why">${escHtml(verdictWhy)}</span>
+    </div>
+    <div class="result-notes">${genres ? '<strong>Genre:</strong> ' + escHtml(genres) + (country ? ' · ' + escHtml(country) : '') : ''}</div>
+    <a class="discogs-link" href="${discogsUrl}" target="_blank">
+      View on Discogs
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    </a>
+  `;
+  card.style.display = 'block';
+
+  // Save to history
+  const historyItem = { title, artist, year, verdict, lowestPrice: lp, releaseId: release.id, timestamp: Date.now() };
+  scanHistory.unshift(historyItem);
+  if (scanHistory.length > 30) scanHistory.pop();
+  localStorage.setItem('flipdiscHistory', JSON.stringify(scanHistory));
+
+  // Scroll result into view
+  setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+}
+
+// ─── UI helpers ───
+function showStatus(msg) {
+  const strip = document.getElementById('statusStrip');
+  document.getElementById('statusText').textContent = msg;
+  strip.style.display = 'flex';
+}
+function hideStatus() { document.getElementById('statusStrip').style.display = 'none'; }
+function showError(msg) {
+  const el = document.getElementById('errorStrip');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+}
+function hideError() { document.getElementById('errorStrip').style.display = 'none'; }
+
+function toggleManual() {
+  manualOpen = !manualOpen;
+  const panel = document.getElementById('manualPanel');
+  panel.classList.toggle('open', manualOpen);
+  if (manualOpen) {
+    setTimeout(() => document.getElementById('manualInput').focus(), 200);
+  }
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── History modal ───
+function openHistory() {
+  const list = document.getElementById('historyList');
+  if (scanHistory.length === 0) {
+    list.innerHTML = '<div class="history-empty">No scans yet. Start scanning!</div>';
+  } else {
+    list.innerHTML = scanHistory.map((item, i) => {
+      const vc = { flip: 'hv-flip', maybe: 'hv-maybe', pass: 'hv-pass' }[item.verdict] || 'hv-pass';
+      const vl = { flip: 'FLIP', maybe: 'MAYBE', pass: 'PASS' }[item.verdict] || 'PASS';
+      const price = item.lowestPrice ? '$' + item.lowestPrice.toFixed(2) : '—';
+      const ago = timeAgo(item.timestamp);
+      return `<div class="history-item" onclick="closeHistory(); openDiscogsLink(${item.releaseId})">
+        <div class="history-info">
+          <div class="history-name">${escHtml(item.title)}</div>
+          <div class="history-sub">${escHtml(item.artist)} · lowest ${price} · ${ago}</div>
+        </div>
+        <span class="history-verdict-badge ${vc}">${vl}</span>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('historyModal').classList.add('open');
+}
+
+function closeHistory() { document.getElementById('historyModal').classList.remove('open'); }
+function closeHistoryOutside(e) { if (e.target === document.getElementById('historyModal')) closeHistory(); }
+function openDiscogsLink(id) { window.open(`https://www.discogs.com/release/${id}`, '_blank'); }
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h/24)}d ago`;
+}
+</script>
+</body>
+</html>
