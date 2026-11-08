@@ -862,6 +862,7 @@ const SCAN_INTERVAL_MS = 120;      // pause between decode attempts
 const READ_GAP_MS = 1000;          // if no matching read for this long, the "2 in a row" count starts over
 const REPEAT_COOLDOWN_MS = 4000;   // after "Scan next disc", ignore the disc we just scanned for this long
 const MAX_DECODE_WIDTH = 1280;     // shrink frames to this width before decoding (keeps it fast)
+const RESUME_DELAY_MS = 2000;      // after a lookup finishes, wait this long before watching for the next disc
 const BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e'];   // CD barcode types only (no Code 128)
 
 let camStream = null;
@@ -876,7 +877,7 @@ let lastRead = null;
 let sameCount = 0;
 let lastReadAt = 0;
 let lastAccepted = null;
-let lastAcceptedAt = 0;
+let ignoreAcceptedUntil = 0;       // auto-scan ignores lastAccepted until this time (Infinity = until a different disc is scanned)
 let zxingReader = null;
 let barcodeDetector = null;
 let audioCtx = null;
@@ -968,13 +969,28 @@ function getZXingReader() {
   return zxingReader;
 }
 
-// Copies the current video frame into a canvas (optionally just the middle area, shrunk to maxWidth)
-function drawVideoToCanvas(video, cv) {
+// Copies the current video frame into a canvas.
+// crop = true: only the middle of what's visible on screen (around the scan frame), shrunk to MAX_DECODE_WIDTH.
+// crop = false: the whole camera frame at full size (used by the Scan Barcode button).
+function drawVideoToCanvas(video, cv, crop = false) {
   const vw = video.videoWidth, vh = video.videoHeight;
-  cv.width = vw;
-  cv.height = vh;
+  let sx = 0, sy = 0, sw = vw, sh = vh;
+  const box = video.getBoundingClientRect();
+  if (crop && box.width > 0 && box.height > 0) {
+    // The video fills its box with object-fit: cover, so work out which part of the frame is on screen
+    const scale = Math.max(box.width / vw, box.height / vh);
+    const visW = box.width / scale, visH = box.height / scale;
+    // Keep a generous margin around the scan frame (frame is 70% x 40% of the box)
+    sw = Math.round(visW * 0.9);
+    sh = Math.round(visH * 0.7);
+    sx = Math.round((vw - sw) / 2);
+    sy = Math.round((vh - sh) / 2);
+  }
+  const shrink = crop ? Math.min(1, MAX_DECODE_WIDTH / sw) : 1;
+  cv.width = Math.round(sw * shrink);
+  cv.height = Math.round(sh * shrink);
   const ctx = cv.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(video, 0, 0, vw, vh);
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
   return cv;
 }
 
@@ -1004,8 +1020,13 @@ function startAutoScan() {
   if (autoScanOn || !camStream) return;
   autoScanOn = true;
   resetReadState();
-  setCamStatus('POINT AT BARCODE');
+  setCamStatus(idleStatusText());
   scheduleScan(0);
+}
+
+// While a result is on screen, tell the user the scanner is waiting for a different disc
+function idleStatusText() {
+  return ignoreAcceptedUntil === Infinity ? 'READY FOR NEXT DISC' : 'POINT AT BARCODE';
 }
 
 function stopAutoScan() {
@@ -1052,16 +1073,15 @@ async function scanTick() {
     return;
   }
 
-  setCamStatus('POINT AT BARCODE');
+  setCamStatus(idleStatusText());
   decodeAttempts++;
   lastDecodeError = '';
   updateDebugStats();
   decoding = true;
   let value = null;
   try {
-    const cv = drawVideoToCanvas(video, document.getElementById('canvasEl'));
+    const cv = drawVideoToCanvas(video, document.getElementById('canvasEl'), true);
     value = await decodeCanvas(cv);
-    if (!value) value = await decodeCanvas(cv); // try again for inverted
   } catch (err) {
     lastDecodeError = err.message || 'Unknown error';
     console.error(err);
@@ -1080,7 +1100,7 @@ function handleRead(value) {
     if (lastRead && now - lastReadAt > READ_GAP_MS) resetReadState();
     return;
   }
-  if (value === lastAccepted && now - lastAcceptedAt < REPEAT_COOLDOWN_MS) return;
+  if (value === lastAccepted && now < ignoreAcceptedUntil) return;   // the disc you're reviewing
 
   if (value === lastRead && now - lastReadAt <= READ_GAP_MS) {
     sameCount++;
@@ -1099,7 +1119,7 @@ async function acceptBarcode(barcode) {
   busy = true;
   stopAutoScan();
   lastAccepted = barcode;
-  lastAcceptedAt = Date.now();
+  ignoreAcceptedUntil = Infinity;   // keep ignoring this disc until a different one is scanned
   resetReadState();
 
   flashFrame();
@@ -1118,6 +1138,10 @@ async function acceptBarcode(barcode) {
     busy = false;
     document.getElementById('nextWrap').style.display = 'block';
     setCamStatus('SCAN COMPLETE');
+    // After a short breather, quietly watch for the next (different) disc. The result stays on screen.
+    setTimeout(() => {
+      if (!busy && document.getElementById('scannerScreen').style.display === 'flex') startAutoScan();
+    }, RESUME_DELAY_MS);
   }
 }
 
@@ -1150,7 +1174,8 @@ function scanNext() {
   const sc = document.querySelector('.scroll-content');
   if (sc) sc.scrollTop = 0;
 
-  lastAcceptedAt = Date.now();   // ignore the disc still in view for a few seconds
+  ignoreAcceptedUntil = Date.now() + REPEAT_COOLDOWN_MS;   // ignore the disc still in view for a few seconds
+  stopAutoScan();                // restart below so the status text updates right away
   decodeAttempts = 0;
   lastDecodeError = '';
   if (camStream) startAutoScan();
@@ -1231,9 +1256,8 @@ document.addEventListener('visibilitychange', () => {
   if (document.getElementById('scannerScreen').style.display !== 'flex') return;
   const track = getVideoTrack();
   if (camStream && (!track || track.readyState === 'ended')) {
-    const resume = autoScanOn;
     stopCamera();
-    startCamera(resume);
+    startCamera(true);   // always resume watching; an in-progress lookup is protected by `busy`
   }
 });
 
