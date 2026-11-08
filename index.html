@@ -268,6 +268,21 @@ header {
 .scan-frame.hit .corner { border-color: var(--green); opacity: 1; }
 .scan-frame.hit .scan-line { display: none; }
 
+/* Big green flash over the whole camera area, so a scan is obvious with the phone on silent */
+.hit-flash {
+  position: absolute;
+  inset: 0;
+  background: var(--green);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.hit-flash.on { animation: hitflash 0.9s ease-out; }
+@keyframes hitflash {
+  0%   { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+
 /* Torch (flashlight) button — only shown if the device supports it */
 .torch-btn {
   position: absolute;
@@ -732,6 +747,7 @@ header {
   <div class="camera-wrap">
     <video id="videoEl" autoplay playsinline muted webkit-playsinline></video>
     <canvas id="canvasEl" style="display:none;"></canvas>
+    <div class="hit-flash" id="hitFlash"></div>
     <div class="cam-overlay">
       <div class="scan-frame">
         <div class="corner tl"></div>
@@ -859,7 +875,7 @@ function showScanner() {
 }
 
 // ─── App version (shown in the debug lines). Bump this with every change so you can tell which version the phone loaded. ───
-const APP_VERSION = '2026-11-08.1';
+const APP_VERSION = '2026-11-08.2';
 
 // ─── Camera + auto-scan settings ───
 const SCAN_INTERVAL_MS = 120;      // pause between decode attempts
@@ -1137,7 +1153,7 @@ async function acceptBarcode(barcode) {
 
   flashFrame();
   beep();
-  haptic();
+  if (navigator.vibrate) navigator.vibrate(80);   // Android only; iPhone Safari ignores this
   setCamStatus('FOUND ' + barcode);
 
   hideError();
@@ -1162,6 +1178,11 @@ function flashFrame() {
   const frame = document.querySelector('.scan-frame');
   frame.classList.add('hit');
   setTimeout(() => frame.classList.remove('hit'), 700);
+  // Whole camera area flashes green (restart the animation even if it's still running)
+  const flash = document.getElementById('hitFlash');
+  flash.classList.remove('on');
+  void flash.offsetWidth;
+  flash.classList.add('on');
 }
 
 function setCamStatus(text) {
@@ -1176,28 +1197,6 @@ function updateDebugStats() {
   document.getElementById('debugError').textContent = `Last result: ${lastDecodeError || '—'}`;
   document.getElementById('debugVer').textContent = `Version: ${APP_VERSION}`;
 }
-
-// ─── Haptic "tap" when a barcode is accepted (works with the phone on silent) ───
-// Android: the standard vibrate command. iPhone (iOS 18+): Safari ignores vibrate, but flipping an
-// on/off switch gives a haptic tap, so we flip an invisible one. Unofficial trick; if it doesn't work, nothing breaks.
-function haptic() {
-  try {
-    if (navigator.vibrate && navigator.vibrate(80)) return;
-  } catch (e) {}
-  try {
-    const label = document.createElement('label');
-    label.ariaHidden = 'true';
-    label.style.display = 'none';
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.setAttribute('switch', '');
-    label.appendChild(input);
-    document.head.appendChild(label);
-    label.click();
-    label.remove();
-  } catch (e) {}
-}
-
 // ─── Scan the next disc without leaving the scanner screen ───
 function scanNext() {
   if (busy) return;
