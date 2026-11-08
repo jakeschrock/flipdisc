@@ -745,6 +745,7 @@ header {
       <div id="debugRes"></div>
       <div id="debugCount"></div>
       <div id="debugError"></div>
+      <div id="debugVer"></div>
     </div>
     <div class="cam-status"><div class="live-dot"></div> <span id="camStatusText">POINT AT BARCODE</span></div>
     <button class="torch-btn" id="torchBtn" onclick="toggleTorch()" title="Flashlight">
@@ -856,6 +857,9 @@ function showScanner() {
   document.getElementById('scannerScreen').style.flexDirection = 'column';
   startCamera();
 }
+
+// ─── App version (shown in the debug lines). Bump this with every change so you can tell which version the phone loaded. ───
+const APP_VERSION = '2026-11-08.1';
 
 // ─── Camera + auto-scan settings ───
 const SCAN_INTERVAL_MS = 120;      // pause between decode attempts
@@ -1006,7 +1010,8 @@ async function decodeCanvas(cv) {
     const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
     return getZXingReader().decodeWithState(bitmap).getText();
   } catch (e) {
-    lastDecodeError = (e.name || "Error") + ": " + (e.message || "");
+    // "Not found" is normal while aiming; anything else is a real problem worth showing
+    if (!(e instanceof ZXing.NotFoundException)) lastDecodeError = 'error – ' + (e.message || e.name || 'unknown');
   }
   if ('BarcodeDetector' in window) {
     try {
@@ -1064,15 +1069,15 @@ async function scanTick() {
   const video = document.getElementById('videoEl');
   if (isScanPaused()) {
     if (!document.hidden) setCamStatus('PAUSED');
-    lastDecodeError = 'Scanning paused';
+    lastDecodeError = 'paused';
     updateDebugStats();
     resetReadState();
     scheduleScan(300);
     return;
   }
   if (decoding || busy || video.readyState < 2 || !video.videoWidth) {
-    if (video.videoWidth) lastDecodeError = 'Camera ready, decoding paused';
-    else lastDecodeError = 'Camera not ready';
+    if (busy) lastDecodeError = 'looking up disc';
+    else if (!video.videoWidth) lastDecodeError = 'camera not ready';
     updateDebugStats();
     scheduleScan(200);
     return;
@@ -1081,17 +1086,20 @@ async function scanTick() {
   setCamStatus(idleStatusText());
   decodeAttempts++;
   lastDecodeError = '';
-  updateDebugStats();
   decoding = true;
   let value = null;
   try {
     const cv = drawVideoToCanvas(video, document.getElementById('canvasEl'), true);
     value = await decodeCanvas(cv);
   } catch (err) {
-    lastDecodeError = err.message || 'Unknown error';
+    lastDecodeError = 'error – ' + (err.message || 'unknown');
     console.error(err);
   }
   decoding = false;
+  // Show what this attempt actually did (updated after the attempt, not before)
+  if (value) lastDecodeError = 'read ' + value;
+  else if (!lastDecodeError) lastDecodeError = 'no barcode in view';
+  updateDebugStats();
 
   if (!autoScanOn) return;   // stopped while decoding
   handleRead(value);
@@ -1129,7 +1137,7 @@ async function acceptBarcode(barcode) {
 
   flashFrame();
   beep();
-  if (navigator.vibrate) navigator.vibrate(80);
+  haptic();
   setCamStatus('FOUND ' + barcode);
 
   hideError();
@@ -1165,7 +1173,29 @@ function updateDebugStats() {
   const video = document.getElementById('videoEl');
   document.getElementById('debugRes').textContent = `Video: ${video.videoWidth}x${video.videoHeight}`;
   document.getElementById('debugCount').textContent = `Decodes: ${decodeAttempts}`;
-  document.getElementById('debugError').textContent = `Last error: ${lastDecodeError || 'none'}`;
+  document.getElementById('debugError').textContent = `Last result: ${lastDecodeError || '—'}`;
+  document.getElementById('debugVer').textContent = `Version: ${APP_VERSION}`;
+}
+
+// ─── Haptic "tap" when a barcode is accepted (works with the phone on silent) ───
+// Android: the standard vibrate command. iPhone (iOS 18+): Safari ignores vibrate, but flipping an
+// on/off switch gives a haptic tap, so we flip an invisible one. Unofficial trick; if it doesn't work, nothing breaks.
+function haptic() {
+  try {
+    if (navigator.vibrate && navigator.vibrate(80)) return;
+  } catch (e) {}
+  try {
+    const label = document.createElement('label');
+    label.ariaHidden = 'true';
+    label.style.display = 'none';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.setAttribute('switch', '');
+    label.appendChild(input);
+    document.head.appendChild(label);
+    label.click();
+    label.remove();
+  } catch (e) {}
 }
 
 // ─── Scan the next disc without leaving the scanner screen ───
