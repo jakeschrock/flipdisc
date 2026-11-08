@@ -39,8 +39,10 @@ html, body {
 body {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  min-height: -webkit-fill-available;
+  height: 100vh;
+  height: -webkit-fill-available;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 /* ── Header ── */
@@ -50,13 +52,17 @@ header {
   justify-content: space-between;
   padding: 16px 20px 12px;
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 10;
   background: var(--bg);
 }
 
-.logo { display: flex; align-items: center; gap: 10px; }
+/* Long-press the logo to toggle the debug lines, so it must not select text or open a menu */
+.logo {
+  display: flex; align-items: center; gap: 10px;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+}
 
 .disc-icon {
   width: 28px; height: 28px;
@@ -99,6 +105,8 @@ header {
 /* ── Setup Screen ── */
 #setupScreen {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -195,22 +203,25 @@ header {
 /* ── Scanner Screen ── */
 #scannerScreen {
   flex: 1;
+  min-height: 0;
   display: none;
   flex-direction: column;
 }
 
-/* ── Camera ── */
+/* ── Camera: takes whatever space the result panel doesn't need ── */
 .camera-wrap {
   position: relative;
   width: 100%;
+  flex: 1 1 0;
+  min-height: 210px;
   background: #000;
   overflow: hidden;
+  cursor: pointer;
 }
 
-/* Taller on iPhone for comfortable one-handed use */
-.camera-wrap { height: 52vw; min-height: 200px; max-height: 280px; }
-
 #videoEl {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -226,9 +237,12 @@ header {
   pointer-events: none;
 }
 
+/* Fixed barcode shape. The decoder crops around this box's real on-screen position. */
 .scan-frame {
-  width: 70%;
-  height: 40%;
+  width: 72%;
+  max-width: 340px;
+  aspect-ratio: 2.4 / 1;
+  max-height: 60%;
   position: relative;
 }
 
@@ -301,22 +315,9 @@ header {
 }
 .torch-btn.on { background: var(--accent); border-color: var(--accent); }
 
-/* "Scan next disc" button */
-.next-wrap { display: none; margin-bottom: 12px; }
-.next-btn {
-  width: 100%;
-  height: 48px;
-  background: var(--surface2);
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.next-btn:active { opacity: 0.85; transform: scale(0.98); }
-
+/* Debug lines: hidden unless toggled on by long-pressing the logo */
+.cam-debug { display: none !important; }
+body.debug-on .cam-debug { display: flex !important; }
 .cam-debug {
   position: absolute;
   bottom: 8px; left: 50%;
@@ -365,51 +366,55 @@ header {
 }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-/* ── Scroll content below camera ── */
+/* ── Result panel below camera: only as tall as its content, scrolls if it must ── */
 .scroll-content {
-  flex: 1;
+  flex: 0 1 auto;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 16px 16px 120px;
+  padding: 12px 16px;
+}
+.scroll-content > :last-child { margin-bottom: 0; }
+
+/* Hint shown when nothing else is in the result panel */
+.idle-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  padding: 6px 8px;
 }
 
-/* ── Scan button bar (fixed bottom) ── */
+/* ── Bottom bar: [‹ Back] [Forward ›] [search] ── */
 .bottom-bar {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
+  flex-shrink: 0;
   background: var(--bg);
   border-top: 1px solid var(--border);
-  padding: 12px 20px;
-  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  padding: 10px 16px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
-  gap: 12px;
-  z-index: 20;
+  gap: 10px;
 }
 
-.scan-big-btn {
-  flex: 1;
-  height: 54px;
-  background: var(--accent);
-  color: #0a0a0a;
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 16px;
-  font-weight: 700;
-  border: none;
+.nav-btn {
+  flex: 1 1 0;
+  height: 52px;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 14px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  letter-spacing: 0.01em;
 }
-.scan-big-btn:active { opacity: 0.85; transform: scale(0.98); }
-.scan-big-btn:disabled { opacity: 0.35; }
+.nav-btn:active { opacity: 0.8; transform: scale(0.98); }
+.nav-btn:disabled { opacity: 0.3; transform: none; }
 
 .manual-btn {
-  height: 54px;
-  width: 54px;
+  height: 52px;
+  width: 52px;
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -420,6 +425,8 @@ header {
   flex-shrink: 0;
 }
 .manual-btn:active { opacity: 0.7; }
+.manual-btn.on { border-color: var(--accent); background: rgba(200,245,72,0.12); }
+.manual-btn.on svg { stroke: var(--accent); }
 
 /* ── Status / loading strip ── */
 .status-strip {
@@ -446,106 +453,92 @@ header {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Result card ── */
+/* ── "Latest scan · just now        1 / 14" label above the card ── */
+.view-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.view-label.older { color: var(--gold); }
+
+/* ── Result card: verdict first, readable at arm's length ── */
 .result-card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: 14px;
   overflow: hidden;
   margin-bottom: 14px;
 }
+.result-card.rc-flip  { border-color: var(--green); }
+.result-card.rc-maybe { border-color: var(--gold); }
+.result-card.rc-pass  { border-color: var(--red); }
 
-.result-card-header {
-  padding: 14px 16px 0;
+.verdict-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface2);
+  color: var(--text);
 }
+.rc-flip  .verdict-bar { background: var(--green); color: #0a0a0a; }
+.rc-maybe .verdict-bar { background: var(--gold);  color: #0a0a0a; }
+.rc-pass  .verdict-bar { background: var(--red);   color: #0a0a0a; }
 
-.album-title {
-  font-size: 19px;
+.verdict-word {
+  font-size: 34px;
   font-weight: 700;
-  line-height: 1.2;
-  margin-bottom: 3px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.verdict-price { text-align: right; flex-shrink: 0; }
+.vp-value {
+  font-family: 'Space Mono', monospace;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+.vp-sub {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  margin-top: 4px;
+  opacity: 0.75;
+  white-space: nowrap;
 }
 
-.album-meta {
+.rc-body { padding: 12px 16px; }
+.rc-why {
   font-size: 13px;
   color: var(--text-dim);
-  margin-bottom: 14px;
+  line-height: 1.45;
+  margin-bottom: 10px;
 }
-
-.price-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  background: var(--border);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-
-.price-cell {
-  background: var(--surface2);
-  padding: 12px 10px;
-  text-align: center;
-}
-
-.price-cell-label {
-  font-size: 9px;
-  font-family: 'Space Mono', monospace;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  margin-bottom: 5px;
-}
-
-.price-cell-value {
-  font-size: 17px;
+.rc-title {
+  font-size: 16px;
   font-weight: 700;
-  font-family: 'Space Mono', monospace;
-  color: var(--accent);
+  line-height: 1.25;
 }
-
-.price-cell-sub {
-  font-size: 10px;
-  color: var(--text-muted);
+.rc-meta {
+  font-size: 12px;
+  color: var(--text-dim);
   margin-top: 2px;
 }
-
-.verdict-row {
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--border);
-}
-
-.verdict-row.flip { background: rgba(77,255,145,0.06); }
-.verdict-row.maybe { background: rgba(245,200,66,0.06); }
-.verdict-row.pass { background: rgba(255,77,77,0.06); }
-
-.verdict-badge {
-  font-size: 11px;
+.rc-stats {
   font-family: 'Space Mono', monospace;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 6px;
-  white-space: nowrap;
-  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
 }
-.flip .verdict-badge { background: rgba(77,255,145,0.15); color: var(--green); }
-.maybe .verdict-badge { background: rgba(245,200,66,0.15); color: var(--gold); }
-.pass .verdict-badge { background: rgba(255,77,77,0.15); color: var(--red); }
-
-.verdict-why {
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.4;
-}
-
-.result-notes {
-  padding: 12px 16px;
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.6;
-}
+.rc-stats b { color: var(--text); }
+.rc-stats span + span { margin-left: 10px; }
 
 .discogs-link {
   display: flex;
@@ -705,6 +698,7 @@ header {
   padding: 8px;
   cursor: pointer;
   text-decoration: underline;
+  margin-top: 16px;
 }
 
 </style>
@@ -712,7 +706,7 @@ header {
 <body>
 
 <header>
-  <div class="logo">
+  <div class="logo" id="logo" oncontextmenu="return false;">
     <div class="disc-icon"></div>
     <span class="logo-text">FLIPDISC</span>
   </div>
@@ -744,7 +738,7 @@ header {
 <!-- ════ SCANNER SCREEN ════ -->
 <div id="scannerScreen">
 
-  <div class="camera-wrap">
+  <div class="camera-wrap" id="cameraWrap" onclick="rescan()">
     <video id="videoEl" autoplay playsinline muted webkit-playsinline></video>
     <canvas id="canvasEl" style="display:none;"></canvas>
     <div class="hit-flash" id="hitFlash"></div>
@@ -764,27 +758,14 @@ header {
       <div id="debugVer"></div>
     </div>
     <div class="cam-status"><div class="live-dot"></div> <span id="camStatusText">POINT AT BARCODE</span></div>
-    <button class="torch-btn" id="torchBtn" onclick="toggleTorch()" title="Flashlight">
+    <button class="torch-btn" id="torchBtn" onclick="event.stopPropagation(); toggleTorch()" title="Flashlight">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M13 2L4 14h7l-1 8 9-12h-7z"/>
       </svg>
     </button>
   </div>
 
-  <div class="scroll-content">
-
-    <div id="statusStrip" class="status-strip" style="display:none;">
-      <div class="spinner-sm"></div>
-      <span id="statusText">Looking up...</span>
-    </div>
-
-    <div id="errorStrip" class="error-strip" style="display:none;"></div>
-
-    <div id="resultCard" class="result-card" style="display:none;"></div>
-
-    <div id="nextWrap" class="next-wrap">
-      <button class="next-btn" onclick="scanNext()">Scan next disc</button>
-    </div>
+  <div class="scroll-content" id="resultPanel">
 
     <div id="manualPanel" class="manual-panel">
       <div class="manual-title">Search by artist / album / barcode</div>
@@ -794,19 +775,26 @@ header {
       </div>
     </div>
 
-    <div class="settings-link" onclick="resetToken()">Change Discogs token</div>
+    <div id="statusStrip" class="status-strip" style="display:none;">
+      <div class="spinner-sm"></div>
+      <span id="statusText">Looking up...</span>
+    </div>
+
+    <div id="errorStrip" class="error-strip" style="display:none;"></div>
+
+    <div id="viewLabel" class="view-label" style="display:none;">
+      <span id="viewLabelLeft"></span><span id="viewLabelRight"></span>
+    </div>
+
+    <div id="resultCard" class="result-card" style="display:none;"></div>
+
+    <div id="idleHint" class="idle-hint" style="display:none;"></div>
 
   </div>
 
   <div class="bottom-bar">
-    <button class="scan-big-btn" id="scanBtn" onclick="captureBarcode()">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="2.5">
-        <rect x="1" y="4" width="3" height="16"/><rect x="7" y="4" width="1.5" height="16"/>
-        <rect x="11" y="4" width="3" height="16"/><rect x="17" y="4" width="1.5" height="16"/>
-        <rect x="21" y="4" width="2" height="16"/>
-      </svg>
-      Scan Barcode
-    </button>
+    <button class="nav-btn" id="backBtn" onclick="goBack()" disabled>‹ Back</button>
+    <button class="nav-btn" id="fwdBtn" onclick="goForward()" disabled>Forward ›</button>
     <button class="manual-btn" id="manualToggleBtn" onclick="toggleManual()" title="Manual search">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2">
         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -822,6 +810,7 @@ header {
     <div class="modal-handle"></div>
     <div class="modal-title">Scan History</div>
     <div id="historyList"></div>
+    <div class="settings-link" onclick="closeHistory(); resetToken()">Change Discogs token</div>
   </div>
 </div>
 
@@ -848,6 +837,11 @@ window.addEventListener('load', () => {
   document.getElementById('manualInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') manualSearch();
   });
+  applyDebug();
+  setupLogoLongPress();
+  setupSwipe();
+  updateNav();
+  updateIdleHint();
 });
 
 function saveToken() {
@@ -875,12 +869,11 @@ function showScanner() {
 }
 
 // ─── App version (shown in the debug lines). Bump this with every change so you can tell which version the phone loaded. ───
-const APP_VERSION = '2026-11-08.2';
+const APP_VERSION = '2026-11-08.3';
 
 // ─── Camera + auto-scan settings ───
 const SCAN_INTERVAL_MS = 120;      // pause between decode attempts
 const READ_GAP_MS = 1000;          // if no matching read for this long, the "2 in a row" count starts over
-const REPEAT_COOLDOWN_MS = 4000;   // after "Scan next disc", ignore the disc we just scanned for this long
 const MAX_DECODE_WIDTH = 1280;     // shrink frames to this width before decoding (keeps it fast)
 const RESUME_DELAY_MS = 2000;      // after a lookup finishes, wait this long before watching for the next disc
 const BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e'];   // CD barcode types only (no Code 128)
@@ -903,6 +896,9 @@ let barcodeDetector = null;
 let audioCtx = null;
 let decodeAttempts = 0;
 let lastDecodeError = '';
+let pendingBarcode = null;         // barcode whose lookup is running, saved with its history entry
+let viewIndex = -1;                // which history entry is on screen (0 = newest, -1 = nothing)
+const HISTORY_LIMIT = 100;
 
 // ─── Camera ───
 async function startCamera(resumeScanning = true) {
@@ -939,7 +935,6 @@ async function startCamera(resumeScanning = true) {
   } catch (err) {
     console.error(err);
     showError('Camera access denied. Use manual search instead.');
-    document.getElementById('scanBtn').disabled = true;
   } finally {
     camStarting = false;
   }
@@ -989,24 +984,33 @@ function getZXingReader() {
   return zxingReader;
 }
 
-// Copies the current video frame into a canvas.
-// crop = true: only the middle of what's visible on screen (around the scan frame), shrunk to MAX_DECODE_WIDTH.
-// crop = false: the whole camera frame at full size (used by the Scan Barcode button).
-function drawVideoToCanvas(video, cv, crop = false) {
+// Copies the part of the current video frame around the on-screen scan frame into a canvas,
+// shrunk to MAX_DECODE_WIDTH. Falls back to the whole frame if the scan frame can't be measured.
+function drawVideoToCanvas(video, cv) {
   const vw = video.videoWidth, vh = video.videoHeight;
   let sx = 0, sy = 0, sw = vw, sh = vh;
   const box = video.getBoundingClientRect();
-  if (crop && box.width > 0 && box.height > 0) {
-    // The video fills its box with object-fit: cover, so work out which part of the frame is on screen
+  const frame = document.querySelector('.scan-frame').getBoundingClientRect();
+  if (box.width > 0 && box.height > 0 && frame.width > 0 && frame.height > 0) {
+    // The video fills its box with object-fit: cover: it is scaled up and centered, so part of it is cut off
     const scale = Math.max(box.width / vw, box.height / vh);
-    const visW = box.width / scale, visH = box.height / scale;
-    // Keep a generous margin around the scan frame (frame is 70% x 40% of the box)
-    sw = Math.round(visW * 0.9);
-    sh = Math.round(visH * 0.7);
-    sx = Math.round((vw - sw) / 2);
-    sy = Math.round((vh - sh) / 2);
+    const offX = (box.width - vw * scale) / 2;     // zero or negative
+    const offY = (box.height - vh * scale) / 2;
+    // Area to read: the scan frame plus a margin (1.3x its width, 1.75x its height), same center
+    const cx = frame.left + frame.width / 2 - box.left;
+    const cy = frame.top + frame.height / 2 - box.top;
+    const w = frame.width * 1.3, h = frame.height * 1.75;
+    // Screen coordinates -> video pixels, clamped to the video
+    const x0 = Math.max(0, (cx - w / 2 - offX) / scale);
+    const y0 = Math.max(0, (cy - h / 2 - offY) / scale);
+    const x1 = Math.min(vw, (cx + w / 2 - offX) / scale);
+    const y1 = Math.min(vh, (cy + h / 2 - offY) / scale);
+    if (x1 - x0 >= 1 && y1 - y0 >= 1) {
+      sx = Math.round(x0); sy = Math.round(y0);
+      sw = Math.round(x1 - x0); sh = Math.round(y1 - y0);
+    }
   }
-  const shrink = crop ? Math.min(1, MAX_DECODE_WIDTH / sw) : 1;
+  const shrink = Math.min(1, MAX_DECODE_WIDTH / sw);
   cv.width = Math.round(sw * shrink);
   cv.height = Math.round(sh * shrink);
   const ctx = cv.getContext('2d', { willReadFrequently: true });
@@ -1105,7 +1109,7 @@ async function scanTick() {
   decoding = true;
   let value = null;
   try {
-    const cv = drawVideoToCanvas(video, document.getElementById('canvasEl'), true);
+    const cv = drawVideoToCanvas(video, document.getElementById('canvasEl'));
     value = await decodeCanvas(cv);
   } catch (err) {
     lastDecodeError = 'error – ' + (err.message || 'unknown');
@@ -1157,15 +1161,16 @@ async function acceptBarcode(barcode) {
   setCamStatus('FOUND ' + barcode);
 
   hideError();
-  document.getElementById('resultCard').style.display = 'none';
-  document.getElementById('nextWrap').style.display = 'none';
+  hideResult();
   showStatus(`Found barcode: ${barcode} — searching Discogs...`);
 
+  pendingBarcode = barcode;         // saved into the history entry by renderResult()
   try {
     await lookupBarcode(barcode);   // existing lookup (shows the result or its own error)
   } finally {
+    pendingBarcode = null;
     busy = false;
-    document.getElementById('nextWrap').style.display = 'block';
+    updateIdleHint();
     setCamStatus('SCAN COMPLETE');
     // After a short breather, quietly watch for the next (different) disc. The result stays on screen.
     setTimeout(() => {
@@ -1197,58 +1202,47 @@ function updateDebugStats() {
   document.getElementById('debugError').textContent = `Last result: ${lastDecodeError || '—'}`;
   document.getElementById('debugVer').textContent = `Version: ${APP_VERSION}`;
 }
-// ─── Scan the next disc without leaving the scanner screen ───
-function scanNext() {
+// ─── Tap the camera: allow the same disc to be read again (e.g. after a failed lookup) ───
+function rescan() {
   if (busy) return;
-  hideError();
-  hideStatus();
-  document.getElementById('resultCard').style.display = 'none';
-  document.getElementById('nextWrap').style.display = 'none';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-  const sc = document.querySelector('.scroll-content');
-  if (sc) sc.scrollTop = 0;
-
-  ignoreAcceptedUntil = Date.now() + REPEAT_COOLDOWN_MS;   // ignore the disc still in view for a few seconds
-  stopAutoScan();                // restart below so the status text updates right away
+  ignoreAcceptedUntil = 0;
+  lastAccepted = null;
   decodeAttempts = 0;
   lastDecodeError = '';
+  stopAutoScan();                // restart so the status text updates right away
   if (camStream) startAutoScan();
   else startCamera(true);
 }
 
-// ─── Old "Scan Barcode" button (kept as a backup): one tap = one full-frame read ───
-async function captureBarcode() {
-  const video = document.getElementById('videoEl');
+// ─── Debug lines: long-press the FLIPDISC logo (~700ms) to show/hide; remembered on this device ───
+let debugOn = false;
+try { debugOn = localStorage.getItem('flipdiscDebug') === '1'; } catch (e) {}
 
-  if (!camStream || !video.videoWidth) {
-    showError('Camera not available. Use manual search.');
-    return;
-  }
-  if (busy) return;
+function applyDebug() {
+  document.body.classList.toggle('debug-on', debugOn);
+  if (debugOn) updateDebugStats();
+}
 
-  hideError();
-  showStatus('Reading barcode...');
-
-  let barcode = null;
-  try {
-    const cv = document.createElement('canvas');   // its own canvas so it never clashes with the auto-scan loop
-    drawVideoToCanvas(video, cv);
-    barcode = await decodeCanvas(cv);
-    if (!barcode) barcode = await decodeCanvas(cv);
-  } catch (err) {
-    hideStatus();
-    showError('Scan failed. Try manual search or hold phone closer to barcode.');
-    console.error(err);
-    return;
-  }
-
-  if (!barcode) {
-    hideStatus();
-    showError('No barcode detected. Hold phone steady with barcode filling the frame, then try again. Or use manual search.');
-    return;
-  }
-
-  await acceptBarcode(barcode);
+function setupLogoLongPress() {
+  const logo = document.getElementById('logo');
+  let timer = null;
+  const start = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      debugOn = !debugOn;
+      try { localStorage.setItem('flipdiscDebug', debugOn ? '1' : '0'); } catch (e) {}
+      applyDebug();
+    }, 700);
+  };
+  const cancel = () => clearTimeout(timer);
+  logo.addEventListener('touchstart', start, { passive: true });
+  logo.addEventListener('touchend', cancel);
+  logo.addEventListener('touchmove', cancel, { passive: true });
+  logo.addEventListener('touchcancel', cancel);
+  logo.addEventListener('mousedown', start);
+  logo.addEventListener('mouseup', cancel);
+  logo.addEventListener('mouseleave', cancel);
+  logo.addEventListener('contextmenu', e => e.preventDefault());
 }
 
 // ─── Beep (made in the browser, no sound file needed) ───
@@ -1315,7 +1309,7 @@ async function lookupBarcode(barcode) {
 
   } catch (err) {
     hideStatus();
-    showError('Could not reach Discogs. Check your token or internet connection.');
+    showError('Could not reach Discogs. Check your token or internet connection, then tap the camera to try again.');
     console.error(err);
   }
 }
@@ -1341,9 +1335,10 @@ async function manualSearch() {
     }
 
     const release = data.results[0];
-    await fetchReleaseDetails(release.id, release);
+    const shown = await fetchReleaseDetails(release.id, release);
     document.getElementById('manualInput').value = '';
     document.getElementById('manualInput').blur();
+    if (shown) closeManual();   // close the panel so auto-scan resumes
 
   } catch (err) {
     hideStatus();
@@ -1366,11 +1361,13 @@ async function fetchReleaseDetails(releaseId, searchResult) {
 
     hideStatus();
     renderResult(release, stats, searchResult);
+    return true;
 
   } catch (err) {
     hideStatus();
     showError('Could not load price data.');
     console.error(err);
+    return false;
   }
 }
 
@@ -1433,53 +1430,133 @@ function renderResult(release, stats, searchResult) {
     verdictWhy = `${numWanting.toLocaleString()} want it, ${numHave.toLocaleString()} have it — strong demand ratio. Lowest listing $${lp.toFixed(2)}.`;
   }
 
-  const discogsUrl = `https://www.discogs.com/release/${release.id}`;
+  // Save everything needed to redraw this result later, without another Discogs call
+  const historyItem = {
+    title, artist, year, label, catno, country, genres,
+    verdict, verdictWhy,
+    lowestPrice: lp ?? null, numForSale, numWanting, numHave,
+    releaseId: release.id ?? null,
+    barcode: pendingBarcode,      // null for manual searches
+    timestamp: Date.now()
+  };
+  scanHistory.unshift(historyItem);
+  while (scanHistory.length > HISTORY_LIMIT) scanHistory.pop();
+  try { localStorage.setItem('flipdiscHistory', JSON.stringify(scanHistory)); } catch (e) { console.error(e); }
 
-  const verdictLabel = { flip: '🟢 FLIP IT', maybe: '🟡 MAYBE', pass: '🔴 PASS' }[verdict];
+  showHistoryItem(0);
+}
+
+// ─── Draw any saved history entry (0 = newest). Old entries may be missing fields: skip what's missing. ───
+function showHistoryItem(i) {
+  const item = scanHistory[i];
+  if (!item) return;
+  viewIndex = i;
+
+  const v = ['flip', 'maybe', 'pass'].includes(item.verdict) ? item.verdict : null;
+  const word = { flip: 'FLIP IT', maybe: 'MAYBE', pass: 'PASS' }[v] || '—';
+  const lp = typeof item.lowestPrice === 'number' ? item.lowestPrice : null;
+  const num = n => (typeof n === 'number' ? n.toLocaleString() : null);
+
+  const priceSub = 'lowest ask' + (typeof item.numForSale === 'number' ? ` · ${item.numForSale} for sale` : '');
+  const meta = [item.artist, item.year, item.label, item.catno].filter(Boolean).map(escHtml).join(' · ');
+
+  const stats = [];
+  if (num(item.numWanting) !== null) stats.push(`<span><b>${num(item.numWanting)}</b> want</span>`);
+  if (num(item.numHave) !== null) stats.push(`<span><b>${num(item.numHave)}</b> have</span>`);
+  const tail = [item.genres, item.country].filter(Boolean).map(escHtml).join(' · ');
+  if (tail) stats.push(`<span>${tail}</span>`);
 
   const card = document.getElementById('resultCard');
+  card.className = 'result-card' + (v ? ' rc-' + v : '');
   card.innerHTML = `
-    <div class="result-card-header">
-      <div class="album-title">${escHtml(title)}</div>
-      <div class="album-meta">${escHtml(artist)}${year ? ' · ' + year : ''}${label ? ' · ' + escHtml(label) : ''}${catno ? ' · ' + escHtml(catno) : ''}</div>
-    </div>
-    <div class="price-grid">
-      <div class="price-cell">
-        <div class="price-cell-label">Lowest Ask</div>
-        <div class="price-cell-value">${lp ? '$' + lp.toFixed(2) : '—'}</div>
-        <div class="price-cell-sub">${numForSale} for sale</div>
-      </div>
-      <div class="price-cell">
-        <div class="price-cell-label">Wanting</div>
-        <div class="price-cell-value">${numWanting.toLocaleString()}</div>
-        <div class="price-cell-sub">on wantlist</div>
-      </div>
-      <div class="price-cell">
-        <div class="price-cell-label">Have It</div>
-        <div class="price-cell-value">${numHave.toLocaleString()}</div>
-        <div class="price-cell-sub">in collections</div>
+    <div class="verdict-bar">
+      <div class="verdict-word">${word}</div>
+      <div class="verdict-price">
+        <div class="vp-value">${lp !== null ? '$' + lp.toFixed(2) : '—'}</div>
+        <div class="vp-sub">${priceSub}</div>
       </div>
     </div>
-    <div class="verdict-row ${verdict}">
-      <span class="verdict-badge">${verdictLabel}</span>
-      <span class="verdict-why">${escHtml(verdictWhy)}</span>
+    <div class="rc-body">
+      ${item.verdictWhy ? `<div class="rc-why">${escHtml(item.verdictWhy)}</div>` : ''}
+      <div class="rc-title">${escHtml(item.title || 'Unknown')}</div>
+      ${meta ? `<div class="rc-meta">${meta}</div>` : ''}
+      ${stats.length ? `<div class="rc-stats">${stats.join('')}</div>` : ''}
     </div>
-    <div class="result-notes">${genres ? '<strong>Genre:</strong> ' + escHtml(genres) + (country ? ' · ' + escHtml(country) : '') : ''}</div>
-    <a class="discogs-link" href="${discogsUrl}" target="_blank">
+    ${item.releaseId ? `<a class="discogs-link" href="https://www.discogs.com/release/${encodeURIComponent(item.releaseId)}" target="_blank">
       View on Discogs
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-    </a>
+    </a>` : ''}
   `;
   card.style.display = 'block';
 
-  // Save to history
-  const historyItem = { title, artist, year, verdict, lowestPrice: lp, releaseId: release.id, timestamp: Date.now() };
-  scanHistory.unshift(historyItem);
-  if (scanHistory.length > 30) scanHistory.pop();
-  localStorage.setItem('flipdiscHistory', JSON.stringify(scanHistory));
+  // "Latest scan · just now        1 / 14" (gold "Earlier scan" for older entries)
+  const lbl = document.getElementById('viewLabel');
+  const ago = item.timestamp ? ' · ' + timeAgo(item.timestamp) : '';
+  document.getElementById('viewLabelLeft').textContent = (i === 0 ? 'Latest scan' : 'Earlier scan') + ago;
+  document.getElementById('viewLabelRight').textContent = `${i + 1} / ${scanHistory.length}`;
+  lbl.classList.toggle('older', i > 0);
+  lbl.style.display = 'flex';
 
-  // Scroll result into view
-  setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  document.getElementById('resultPanel').scrollTop = 0;
+  updateNav();
+  updateIdleHint();
+}
+
+// Hide the result (a new scan is starting)
+function hideResult() {
+  viewIndex = -1;
+  document.getElementById('resultCard').style.display = 'none';
+  document.getElementById('viewLabel').style.display = 'none';
+  updateNav();
+  updateIdleHint();
+}
+
+// ─── Back / Forward through saved scans ───
+function goBack() {
+  if (viewIndex + 1 >= scanHistory.length) return;
+  hideError();
+  showHistoryItem(viewIndex + 1);
+}
+function goForward() {
+  if (viewIndex <= 0) return;
+  hideError();
+  showHistoryItem(viewIndex - 1);
+}
+function updateNav() {
+  const n = scanHistory.length;
+  document.getElementById('backBtn').disabled = n === 0 || viewIndex >= n - 1;
+  document.getElementById('fwdBtn').disabled = viewIndex <= 0;
+}
+
+// Swipe the result panel sideways: right = Back, left = Forward
+function setupSwipe() {
+  const panel = document.getElementById('resultPanel');
+  let x0 = null, y0 = null;
+  panel.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1 || e.target.closest('input')) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+  }, { passive: true });
+  panel.addEventListener('touchend', e => {
+    if (x0 === null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) > 60 && Math.abs(dy) < 50) {
+      if (dx > 0) goBack(); else goForward();
+    }
+  }, { passive: true });
+}
+
+// Small hint under the camera when the result panel would otherwise be empty
+function updateIdleHint() {
+  const hint = document.getElementById('idleHint');
+  const empty = viewIndex === -1 &&
+    document.getElementById('statusStrip').style.display === 'none' &&
+    document.getElementById('errorStrip').style.display === 'none';
+  if (!empty) { hint.style.display = 'none'; return; }
+  hint.innerHTML = 'Point the camera at a barcode. It scans on its own.' +
+    (scanHistory.length ? '<br>Tap Back to see your last scan.' : '');
+  hint.style.display = 'block';
 }
 
 // ─── UI helpers ───
@@ -1487,23 +1564,29 @@ function showStatus(msg) {
   const strip = document.getElementById('statusStrip');
   document.getElementById('statusText').textContent = msg;
   strip.style.display = 'flex';
+  updateIdleHint();
 }
-function hideStatus() { document.getElementById('statusStrip').style.display = 'none'; }
+function hideStatus() { document.getElementById('statusStrip').style.display = 'none'; updateIdleHint(); }
 function showError(msg) {
   const el = document.getElementById('errorStrip');
   el.textContent = msg;
   el.style.display = 'block';
+  updateIdleHint();
   setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
 }
-function hideError() { document.getElementById('errorStrip').style.display = 'none'; }
+function hideError() { document.getElementById('errorStrip').style.display = 'none'; updateIdleHint(); }
 
 function toggleManual() {
   manualOpen = !manualOpen;
-  const panel = document.getElementById('manualPanel');
-  panel.classList.toggle('open', manualOpen);
+  document.getElementById('manualPanel').classList.toggle('open', manualOpen);
+  document.getElementById('manualToggleBtn').classList.toggle('on', manualOpen);
   if (manualOpen) {
+    document.getElementById('resultPanel').scrollTop = 0;
     setTimeout(() => document.getElementById('manualInput').focus(), 200);
   }
+}
+function closeManual() {
+  if (manualOpen) toggleManual();
 }
 
 function escHtml(str) {
@@ -1520,12 +1603,12 @@ function openHistory() {
     list.innerHTML = scanHistory.map((item, i) => {
       const vc = { flip: 'hv-flip', maybe: 'hv-maybe', pass: 'hv-pass' }[item.verdict] || 'hv-pass';
       const vl = { flip: 'FLIP', maybe: 'MAYBE', pass: 'PASS' }[item.verdict] || 'PASS';
-      const price = item.lowestPrice ? '$' + item.lowestPrice.toFixed(2) : '—';
-      const ago = timeAgo(item.timestamp);
-      return `<div class="history-item" onclick="closeHistory(); openDiscogsLink(${item.releaseId})">
+      const price = typeof item.lowestPrice === 'number' ? '$' + item.lowestPrice.toFixed(2) : '—';
+      const ago = item.timestamp ? timeAgo(item.timestamp) : '';
+      return `<div class="history-item" onclick="closeHistory(); hideError(); showHistoryItem(${i})">
         <div class="history-info">
-          <div class="history-name">${escHtml(item.title)}</div>
-          <div class="history-sub">${escHtml(item.artist)} · lowest ${price} · ${ago}</div>
+          <div class="history-name">${escHtml(item.title || 'Unknown')}</div>
+          <div class="history-sub">${escHtml(item.artist)} · lowest ${price}${ago ? ' · ' + ago : ''}</div>
         </div>
         <span class="history-verdict-badge ${vc}">${vl}</span>
       </div>`;
@@ -1536,7 +1619,6 @@ function openHistory() {
 
 function closeHistory() { document.getElementById('historyModal').classList.remove('open'); }
 function closeHistoryOutside(e) { if (e.target === document.getElementById('historyModal')) closeHistory(); }
-function openDiscogsLink(id) { window.open(`https://www.discogs.com/release/${id}`, '_blank'); }
 
 function timeAgo(ts) {
   const diff = Date.now() - ts;
