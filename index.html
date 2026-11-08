@@ -302,27 +302,19 @@ header {
 }
 .next-btn:active { opacity: 0.85; transform: scale(0.98); }
 
-.cam-debug {
-  position: absolute;
-  bottom: 8px; left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0,0,0,0.65);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  padding: 4px 10px;
-  border-radius: 8px;
-  font-size: 9px;
+}
+
+.cam-debug-log {
+  background: var(--surface2);
+  padding: 8px 16px;
+  font-size: 10px;
   font-family: 'Space Mono', monospace;
   color: #888;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
   white-space: nowrap;
-  pointer-events: none;
-  z-index: 5;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
 }
-.cam-debug div { overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.cam-debug-log div { overflow: hidden; text-overflow: ellipsis; }
 
 .cam-status {
   position: absolute;
@@ -741,11 +733,6 @@ header {
         <div class="scan-line"></div>
       </div>
     </div>
-    <div class="cam-debug">
-      <div id="debugRes"></div>
-      <div id="debugCount"></div>
-      <div id="debugError"></div>
-    </div>
     <div class="cam-status"><div class="live-dot"></div> <span id="camStatusText">POINT AT BARCODE</span></div>
     <button class="torch-btn" id="torchBtn" onclick="toggleTorch()" title="Flashlight">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -754,32 +741,21 @@ header {
     </button>
   </div>
 
-  <div class="scroll-content">
-
-    <div id="statusStrip" class="status-strip" style="display:none;">
-      <div class="spinner-sm"></div>
-      <span id="statusText">Looking up...</span>
-    </div>
-
-    <div id="errorStrip" class="error-strip" style="display:none;"></div>
-
-    <div id="resultCard" class="result-card" style="display:none;"></div>
-
-    <div id="nextWrap" class="next-wrap">
-      <button class="next-btn" onclick="scanNext()">Scan next disc</button>
-    </div>
-
-    <div id="manualPanel" class="manual-panel">
-      <div class="manual-title">Search by artist / album / barcode</div>
-      <div class="search-row">
-        <input class="search-input" id="manualInput" type="search" placeholder="e.g. Portishead Dummy" autocorrect="off" autocapitalize="off">
-        <button class="search-go" onclick="manualSearch()">Go</button>
-      </div>
-    </div>
-
-    <div class="settings-link" onclick="resetToken()">Change Discogs token</div>
-
+  <div class="cam-debug-log">
+    <div id="debugRes">Video: 0x0</div>
+    <div id="debugCount">Decodes: 0</div>
+    <div id="debugError">Last error: none</div>
   </div>
+
+      <div class="manual-input-wrap" style="padding: 16px;">
+        <button class="scan-next-btn" id="scanNextBtn" onclick="scanNext()">Scan next disc</button>
+      </div>
+
+      <div class="manual-toggle-wrap" style="padding: 0 16px 16px;">
+        <button class="discogs-btn" onclick="toggleManual()">Manual Barcode Entry</button>
+      </div>
+
+
 
   <div class="bottom-bar">
     <button class="scan-big-btn" id="scanBtn" onclick="captureBarcode()">
@@ -854,6 +830,7 @@ function showScanner() {
   document.getElementById('setupScreen').style.display = 'none';
   document.getElementById('scannerScreen').style.display = 'flex';
   document.getElementById('scannerScreen').style.flexDirection = 'column';
+  updateDebugStats(); // show initial debug stats immediately
   startCamera();
 }
 
@@ -901,6 +878,7 @@ async function startCamera(resumeScanning = true) {
     camStream = stream;
     const video = document.getElementById('videoEl');
     video.srcObject = stream;
+    updateDebugStats(); // Update debug stats once video dimensions are available
 
     // Continuous autofocus + torch, only where the device says it supports them
     const track = stream.getVideoTracks()[0];
@@ -1032,13 +1010,13 @@ function isScanPaused() {
 
 async function scanTick() {
   loopTimer = null;
+  updateDebugStats(); // Always update debug stats at the start of tick
   if (!autoScanOn) return;
 
   const video = document.getElementById('videoEl');
   if (isScanPaused()) {
     if (!document.hidden) setCamStatus('PAUSED');
     lastDecodeError = 'Scanning paused';
-    updateDebugStats();
     resetReadState();
     scheduleScan(300);
     return;
@@ -1046,15 +1024,13 @@ async function scanTick() {
   if (decoding || busy || video.readyState < 2 || !video.videoWidth) {
     if (video.videoWidth) lastDecodeError = 'Camera ready, decoding paused';
     else lastDecodeError = 'Camera not ready';
-    updateDebugStats();
     scheduleScan(200);
     return;
   }
 
   setCamStatus('POINT AT BARCODE');
   decodeAttempts++;
-  lastDecodeError = '';
-  updateDebugStats();
+  lastDecodeError = ''; // clear old error
   decoding = true;
   let value = null;
   try {
