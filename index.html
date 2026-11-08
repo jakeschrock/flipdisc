@@ -985,7 +985,7 @@ async function decodeCanvas(cv) {
     const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
     return getZXingReader().decodeWithState(bitmap).getText();
   } catch (e) {
-    // "Not found" is normal for most frames, so fall through to the backup detector
+    lastDecodeError = (e.name || "Error") + ": " + (e.message || "");
   }
   if ('BarcodeDetector' in window) {
     try {
