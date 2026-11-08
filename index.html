@@ -259,6 +259,49 @@ header {
   100% { top: 95%; opacity: 0; }
 }
 
+/* Green "barcode accepted" flash on the scan frame */
+.scan-frame { transition: background 0.2s, box-shadow 0.2s; }
+.scan-frame.hit {
+  background: rgba(77,255,145,0.18);
+  box-shadow: 0 0 0 2px var(--green), 0 0 24px rgba(77,255,145,0.55);
+}
+.scan-frame.hit .corner { border-color: var(--green); opacity: 1; }
+.scan-frame.hit .scan-line { display: none; }
+
+/* Torch (flashlight) button — only shown if the device supports it */
+.torch-btn {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 5;
+}
+.torch-btn.on { background: var(--accent); border-color: var(--accent); }
+
+/* "Scan next disc" button */
+.next-wrap { display: none; margin-bottom: 12px; }
+.next-btn {
+  width: 100%;
+  height: 48px;
+  background: var(--surface2);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.next-btn:active { opacity: 0.85; transform: scale(0.98); }
+
 .cam-status {
   position: absolute;
   top: 10px; left: 50%;
@@ -676,7 +719,12 @@ header {
         <div class="scan-line"></div>
       </div>
     </div>
-    <div class="cam-status"><div class="live-dot"></div> POINT AT BARCODE</div>
+    <div class="cam-status"><div class="live-dot"></div> <span id="camStatusText">POINT AT BARCODE</span></div>
+    <button class="torch-btn" id="torchBtn" onclick="toggleTorch()" title="Flashlight">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 2L4 14h7l-1 8 9-12h-7z"/>
+      </svg>
+    </button>
   </div>
 
   <div class="scroll-content">
@@ -689,6 +737,10 @@ header {
     <div id="errorStrip" class="error-strip" style="display:none;"></div>
 
     <div id="resultCard" class="result-card" style="display:none;"></div>
+
+    <div id="nextWrap" class="next-wrap">
+      <button class="next-btn" onclick="scanNext()">Scan next disc</button>
+    </div>
 
     <div id="manualPanel" class="manual-panel">
       <div class="manual-title">Search by artist / album / barcode</div>
@@ -779,52 +831,104 @@ function showScanner() {
   startCamera();
 }
 
+// ─── Camera + auto-scan settings ───
+const SCAN_INTERVAL_MS = 120;      // pause between decode attempts
+const READ_GAP_MS = 1000;          // if no matching read for this long, the "2 in a row" count starts over
+const REPEAT_COOLDOWN_MS = 4000;   // after "Scan next disc", ignore the disc we just scanned for this long
+const MAX_DECODE_WIDTH = 1280;     // shrink frames to this width before decoding (keeps it fast)
+const BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e'];   // CD barcode types only (no Code 128)
+
+let camStream = null;
+let camStarting = false;
+let torchOn = false;
+let autoScanOn = false;            // is the continuous loop running?
+let loopTimer = null;
+let decoding = false;              // a decode is in progress
+let busy = false;                  // a barcode was accepted and its lookup is running
+let lastRead = null;
+let sameCount = 0;
+let lastReadAt = 0;
+let lastAccepted = null;
+let lastAcceptedAt = 0;
+let zxingReader = null;
+let barcodeDetector = null;
+let audioCtx = null;
+
 // ─── Camera ───
-async function startCamera() {
+async function startCamera(resumeScanning = true) {
+  if (camStarting) return;
+  if (camStream) {
+    if (resumeScanning) startAutoScan();
+    return;
+  }
+  camStarting = true;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: 'environment' },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
       }
     });
+    camStream = stream;
     const video = document.getElementById('videoEl');
     video.srcObject = stream;
+
+    // Continuous autofocus + torch, only where the device says it supports them
+    const track = stream.getVideoTracks()[0];
+    const caps = (track && track.getCapabilities) ? track.getCapabilities() : {};
+    if (caps.focusMode && caps.focusMode.includes('continuous')) {
+      track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+    }
+    const torchBtn = document.getElementById('torchBtn');
+    torchOn = false;
+    torchBtn.classList.remove('on');
+    torchBtn.style.display = caps.torch ? 'flex' : 'none';
+
+    if (resumeScanning) startAutoScan();
   } catch (err) {
+    console.error(err);
     showError('Camera access denied. Use manual search instead.');
     document.getElementById('scanBtn').disabled = true;
+  } finally {
+    camStarting = false;
   }
 }
 
 function stopCamera() {
+  stopAutoScan();
   const video = document.getElementById('videoEl');
   if (video.srcObject) {
     video.srcObject.getTracks().forEach(t => t.stop());
     video.srcObject = null;
   }
+  camStream = null;
+  torchOn = false;
+  const torchBtn = document.getElementById('torchBtn');
+  torchBtn.classList.remove('on');
+  torchBtn.style.display = 'none';
 }
 
-// ─── Barcode capture & decode ───
-async function captureBarcode() {
-  const video = document.getElementById('videoEl');
-  const canvas = document.getElementById('canvasEl');
+function getVideoTrack() {
+  return camStream ? camStream.getVideoTracks()[0] : null;
+}
 
-  if (!video.srcObject) {
-    showError('Camera not available. Use manual search.');
-    return;
-  }
+// ─── Torch (flashlight) ───
+function toggleTorch() {
+  const track = getVideoTrack();
+  if (!track) return;
+  const want = !torchOn;
+  track.applyConstraints({ advanced: [{ torch: want }] })
+    .then(() => {
+      torchOn = want;
+      document.getElementById('torchBtn').classList.toggle('on', torchOn);
+    })
+    .catch(err => console.error('Torch failed', err));
+}
 
-  // Capture frame
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0);
-
-  showStatus('Reading barcode...');
-
-  try {
-    // Try ZXing decode
+// ─── Decoding helpers ───
+function getZXingReader() {
+  if (!zxingReader) {
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
       ZXing.BarcodeFormat.EAN_13,
@@ -832,39 +936,277 @@ async function captureBarcode() {
       ZXing.BarcodeFormat.UPC_A,
       ZXing.BarcodeFormat.UPC_E,
     ]);
-    const reader = new ZXing.BrowserBarcodeReader(hints);
-    const imgEl = new Image();
-    imgEl.src = canvas.toDataURL('image/jpeg', 0.9);
-    await new Promise(r => imgEl.onload = r);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    zxingReader = new ZXing.MultiFormatReader();
+    zxingReader.setHints(hints);
+  }
+  return zxingReader;
+}
 
-    let barcode = null;
+// Copies the current video frame into a canvas (optionally just the middle area, shrunk to maxWidth)
+function drawVideoToCanvas(video, cv, cropToFrame, maxWidth) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  let sx = 0, sy = 0, sw = vw, sh = vh;
+  if (cropToFrame) {
+    const box = video.getBoundingClientRect();
+    if (box.width > 0 && box.height > 0) {
+      // The video fills its box with "cover" cropping, so work out the part you can actually see
+      const scale = Math.max(box.width / vw, box.height / vh);
+      const visW = box.width / scale, visH = box.height / scale;
+      const visX = (vw - visW) / 2, visY = (vh - visH) / 2;
+      sw = visW * 0.85; sh = visH * 0.75;
+      sx = visX + (visW - sw) / 2; sy = visY + (visH - sh) / 2;
+    }
+  }
+  const k = Math.min(1, maxWidth / sw);
+  cv.width = Math.max(1, Math.round(sw * k));
+  cv.height = Math.max(1, Math.round(sh * k));
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+  return cv;
+}
+
+// Try ZXing first, then the browser's BarcodeDetector. Returns the barcode text or null.
+async function decodeCanvas(cv) {
+  try {
+    const source = new ZXing.HTMLCanvasElementLuminanceSource(cv);
+    const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
+    return getZXingReader().decodeWithState(bitmap).getText();
+  } catch (e) {
+    // "Not found" is normal for most frames, so fall through to the backup detector
+  }
+  if ('BarcodeDetector' in window) {
     try {
-      const decoded = await reader.decodeFromImageElement(imgEl);
-      barcode = decoded.getText();
-    } catch {
-      // ZXing failed, try raw BarcodeDetector API if available
-      if ('BarcodeDetector' in window) {
-        const detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128'] });
-        const barcodes = await detector.detect(canvas);
-        if (barcodes.length > 0) barcode = barcodes[0].rawValue;
-      }
+      if (!barcodeDetector) barcodeDetector = new BarcodeDetector({ formats: BARCODE_FORMATS });
+      const found = await barcodeDetector.detect(cv);
+      if (found.length > 0) return found[0].rawValue;
+    } catch (e) {
+      // ignore, treat as "nothing found"
     }
+  }
+  return null;
+}
 
-    if (!barcode) {
-      hideStatus();
-      showError('No barcode detected. Hold phone steady with barcode filling the frame, then try again. Or use manual search.');
-      return;
-    }
+// ─── Continuous scanning loop ───
+function startAutoScan() {
+  if (autoScanOn || !camStream) return;
+  autoScanOn = true;
+  resetReadState();
+  setCamStatus('POINT AT BARCODE');
+  scheduleScan(0);
+}
 
-    showStatus(`Found barcode: ${barcode} — searching Discogs...`);
-    await lookupBarcode(barcode);
+function stopAutoScan() {
+  autoScanOn = false;
+  clearTimeout(loopTimer);
+  loopTimer = null;
+}
 
+function scheduleScan(delay) {
+  clearTimeout(loopTimer);
+  loopTimer = setTimeout(scanTick, delay);
+}
+
+function resetReadState() {
+  lastRead = null;
+  sameCount = 0;
+  lastReadAt = 0;
+}
+
+function isScanPaused() {
+  return document.hidden ||
+    manualOpen ||
+    document.getElementById('historyModal').classList.contains('open');
+}
+
+async function scanTick() {
+  loopTimer = null;
+  if (!autoScanOn) return;
+
+  const video = document.getElementById('videoEl');
+  if (isScanPaused()) {
+    if (!document.hidden) setCamStatus('PAUSED');
+    resetReadState();
+    scheduleScan(300);
+    return;
+  }
+  if (decoding || busy || video.readyState < 2 || !video.videoWidth) {
+    scheduleScan(200);
+    return;
+  }
+
+  setCamStatus('POINT AT BARCODE');
+  decoding = true;
+  let value = null;
+  try {
+    const cv = drawVideoToCanvas(video, document.getElementById('canvasEl'), true, MAX_DECODE_WIDTH);
+    value = await decodeCanvas(cv);
+  } catch (err) {
+    console.error(err);
+  }
+  decoding = false;
+
+  if (!autoScanOn) return;   // stopped while decoding
+  handleRead(value);
+  if (autoScanOn) scheduleScan(SCAN_INTERVAL_MS);
+}
+
+// A barcode is only accepted after the same value is read 2 times in a row
+function handleRead(value) {
+  const now = Date.now();
+  if (!value) {
+    if (lastRead && now - lastReadAt > READ_GAP_MS) resetReadState();
+    return;
+  }
+  if (value === lastAccepted && now - lastAcceptedAt < REPEAT_COOLDOWN_MS) return;
+
+  if (value === lastRead && now - lastReadAt <= READ_GAP_MS) {
+    sameCount++;
+  } else {
+    lastRead = value;
+    sameCount = 1;
+  }
+  lastReadAt = now;
+
+  if (sameCount >= 2) acceptBarcode(value);
+}
+
+// ─── Barcode accepted: feedback, stop scanning, run the existing Discogs lookup ───
+async function acceptBarcode(barcode) {
+  if (busy) return;
+  busy = true;
+  stopAutoScan();
+  lastAccepted = barcode;
+  lastAcceptedAt = Date.now();
+  resetReadState();
+
+  flashFrame();
+  beep();
+  if (navigator.vibrate) navigator.vibrate(80);
+  setCamStatus('FOUND ' + barcode);
+
+  hideError();
+  document.getElementById('resultCard').style.display = 'none';
+  document.getElementById('nextWrap').style.display = 'none';
+  showStatus(`Found barcode: ${barcode} — searching Discogs...`);
+
+  try {
+    await lookupBarcode(barcode);   // existing lookup (shows the result or its own error)
+  } finally {
+    busy = false;
+    document.getElementById('nextWrap').style.display = 'block';
+    setCamStatus('SCAN COMPLETE');
+  }
+}
+
+function flashFrame() {
+  const frame = document.querySelector('.scan-frame');
+  frame.classList.add('hit');
+  setTimeout(() => frame.classList.remove('hit'), 700);
+}
+
+function setCamStatus(text) {
+  const el = document.getElementById('camStatusText');
+  if (el.textContent !== text) el.textContent = text;
+}
+
+// ─── Scan the next disc without leaving the scanner screen ───
+function scanNext() {
+  if (busy) return;
+  hideError();
+  hideStatus();
+  document.getElementById('resultCard').style.display = 'none';
+  document.getElementById('nextWrap').style.display = 'none';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const sc = document.querySelector('.scroll-content');
+  if (sc) sc.scrollTop = 0;
+
+  lastAcceptedAt = Date.now();   // ignore the disc still in view for a few seconds
+  if (camStream) startAutoScan();
+  else startCamera(true);
+}
+
+// ─── Old "Scan Barcode" button (kept as a backup): one tap = one full-frame read ───
+async function captureBarcode() {
+  const video = document.getElementById('videoEl');
+
+  if (!camStream || !video.videoWidth) {
+    showError('Camera not available. Use manual search.');
+    return;
+  }
+  if (busy) return;
+
+  hideError();
+  showStatus('Reading barcode...');
+
+  let barcode = null;
+  try {
+    const cv = document.createElement('canvas');   // its own canvas so it never clashes with the auto-scan loop
+    drawVideoToCanvas(video, cv, false, 1920);
+    barcode = await decodeCanvas(cv);
+    // ZXing alternates between normal and inverted images on each call, so try a second time
+    if (!barcode) barcode = await decodeCanvas(cv);
   } catch (err) {
     hideStatus();
     showError('Scan failed. Try manual search or hold phone closer to barcode.');
     console.error(err);
+    return;
   }
+
+  if (!barcode) {
+    hideStatus();
+    showError('No barcode detected. Hold phone steady with barcode filling the frame, then try again. Or use manual search.');
+    return;
+  }
+
+  await acceptBarcode(barcode);
 }
+
+// ─── Beep (made in the browser, no sound file needed) ───
+function unlockAudio() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!audioCtx) audioCtx = new AC();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) {}
+}
+
+function beep() {
+  try {
+    unlockAudio();
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 1800;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.15);
+  } catch (e) {}
+}
+
+// Browsers only allow sound after a tap, so prepare the audio on the first tap anywhere
+document.addEventListener('click', unlockAudio, { passive: true });
+document.addEventListener('touchend', unlockAudio, { passive: true });
+
+// If the phone switched the camera off while the app was in the background, turn it back on
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  if (document.getElementById('scannerScreen').style.display !== 'flex') return;
+  const track = getVideoTrack();
+  if (camStream && (!track || track.readyState === 'ended')) {
+    const resume = autoScanOn;
+    stopCamera();
+    startCamera(resume);
+  }
+});
+
 
 // ─── Discogs lookup by barcode ───
 async function lookupBarcode(barcode) {
