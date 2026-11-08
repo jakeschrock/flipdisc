@@ -997,7 +997,12 @@ function drawVideoToCanvas(video, cv, crop = false) {
 // Try ZXing first, then the browser's BarcodeDetector. Returns the barcode text or null.
 async function decodeCanvas(cv) {
   try {
-    const source = new ZXing.HTMLCanvasElementLuminanceSource(cv);
+    // Build the grayscale image ourselves. ZXing's HTMLCanvasElementLuminanceSource secretly inverts
+    // every other image it prepares, which made upright barcodes unreadable. (Upright barcodes only.)
+    const px = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, cv.width, cv.height).data;
+    const lum = new Uint8ClampedArray(cv.width * cv.height);
+    for (let i = 0, j = 0; i < px.length; i += 4, j++) lum[j] = (px[i] * 306 + px[i + 1] * 601 + px[i + 2] * 117) >> 10;
+    const source = new ZXing.RGBLuminanceSource(lum, cv.width, cv.height);
     const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
     return getZXingReader().decodeWithState(bitmap).getText();
   } catch (e) {
