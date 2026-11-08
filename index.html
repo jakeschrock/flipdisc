@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="FlipDisc">
@@ -51,6 +51,7 @@ header {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px 12px;
+  padding-top: calc(16px + env(safe-area-inset-top));   /* keep clear of the clock/battery in Home Screen mode */
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   z-index: 10;
@@ -473,7 +474,7 @@ body.debug-on .cam-debug { display: flex !important; }
   border: 2px solid var(--border);
   border-radius: 14px;
   overflow: hidden;
-  margin-bottom: 14px;
+  margin-bottom: 0;   /* last thing in the result panel; no extra gap above the buttons */
 }
 .result-card.rc-flip  { border-color: var(--green); }
 .result-card.rc-maybe { border-color: var(--gold); }
@@ -869,7 +870,7 @@ function showScanner() {
 }
 
 // ─── App version (shown in the debug lines). Bump this with every change so you can tell which version the phone loaded. ───
-const APP_VERSION = '2026-11-08.3';
+const APP_VERSION = '2026-11-08.4';
 
 // ─── Camera + auto-scan settings ───
 const SCAN_INTERVAL_MS = 120;      // pause between decode attempts
